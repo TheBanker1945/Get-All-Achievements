@@ -1,0 +1,36 @@
+{
+  "name": "get-all-achievements",
+  "version": "0.1.0",
+  "description": "Drive a GitHub account to every earnable profile achievement tier.",
+  "type": "module",
+  "bin": {
+    "gaa": "./src/cli.js"
+  },
+  "main": "./src/cli.js",
+  "engines": {
+    "node": ">=20"
+  },
+  "files": [
+    "src",
+    "ACHIEVEMENTS.md",
+    "PLAN.md",
+    "README.md"
+  ],
+  "scripts": {
+    "gaa": "node src/cli.js",
+    "test": "node --test \"test/**/*.test.js\""
+  },
+  "keywords": [
+    "github",
+    "achievements",
+    "badges",
+    "pull-shark",
+    "quickdraw",
+    "yolo"
+  ],
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/TheBanker1945/Get-All-Achievements.git"
+  }
+}

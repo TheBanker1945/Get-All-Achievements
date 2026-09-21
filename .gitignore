@@ -1,0 +1,3 @@
+node_modules/
+.gaa-state.json
+*.log
