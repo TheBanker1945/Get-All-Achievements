@@ -84,8 +84,8 @@ which is why Starstruck is report-only here rather than a star-exchange feature.
 |---|---|---|
 | **0** | Install `gh`. Scaffold package, `gh.js`, `preflight.js`, `state.js`, `throttle.js`, `gaa status`. | **done** |
 | **1** | `pr-cycle.js`, `quickdraw`, `yolo`, `pull-shark`, `plan`/`run` orchestrator, test suite. | **done** |
-| **2** | `galaxy-brain` (alt token + GraphQL `markDiscussionCommentAsAnswer`). | next |
-| **3** | `verify.js` profile scrape, Starstruck/Sponsor reporting in `gaa status`. | |
+| **2** | `galaxy-brain` (alt token + GraphQL `markDiscussionCommentAsAnswer`). | **done** |
+| **3** | `verify.js` profile scrape, Starstruck/Sponsor reporting in `gaa status`. | next |
 | **4** | `npx get-all-achievements` publish, CI smoke test. | |
 
 Pair Extraordinaire was folded into phase 1 rather than phase 2: it needs only the alt

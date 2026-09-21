@@ -69,6 +69,11 @@ export const RATE = {
   maxRetries: 6,
   baseBackoffMs: 60_000,
   maxBackoffMs: 15 * 60_000,
+  /** One Galaxy Brain round is 3 GraphQL calls, none of which are PR merges. */
+  galaxyRoundMs: 10_000,
+  /** GitHub 5xx and GraphQL hiccups clear in seconds, not minutes. */
+  transientBackoffMs: 5_000,
+  maxTransientBackoffMs: 60_000,
 };
 
 /** Runs at or above this many cycles require --yes or an interactive confirm. */

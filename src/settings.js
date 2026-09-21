@@ -17,6 +17,20 @@ const DEFAULTS = {
   mergeMethod: 'squash',
 };
 
+export const TOKEN_FILE = '.gaa-alt-token';
+
+/**
+ * The alt account's token comes from the environment or a gitignored file, never from
+ * gaa.config.json - that file is committed, and a token in it would be published.
+ */
+function altTokenFrom(root) {
+  if (process.env.GAA_ALT_TOKEN) return process.env.GAA_ALT_TOKEN.trim();
+  const path = join(root ?? process.cwd(), TOKEN_FILE);
+  if (!existsSync(path)) return null;
+  const token = readFileSync(path, 'utf8').trim();
+  return token || null;
+}
+
 function normaliseCoauthor(value) {
   if (!value) return null;
   if (typeof value === 'string') {
@@ -45,6 +59,13 @@ export function loadSettings(root, overrides = {}) {
     ...overrides,
   };
 
+  if (fileConfig.altToken) {
+    throw new Error(
+      `Do not put altToken in ${CONFIG_FILE} - that file is committed. ` +
+        'Set the GAA_ALT_TOKEN environment variable instead.',
+    );
+  }
+  merged.altToken = overrides.altToken ?? altTokenFrom(root);
   merged.coauthor = normaliseCoauthor(merged.coauthor);
   merged.intervalMs = Math.max(Number(merged.intervalMs) || RATE.defaultIntervalMs, RATE.minIntervalMs);
 

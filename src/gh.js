@@ -59,6 +59,21 @@ export class CommandError extends Error {
     return /API rate limit exceeded/i.test(this.stderr);
   }
 
+  /**
+   * GitHub intermittently answers with a 5xx or an opaque GraphQL failure. These are
+   * server-side hiccups that clear within seconds, so they are worth retrying - unlike
+   * a real error such as a merge conflict or a missing permission.
+   */
+  get isTransientServerError() {
+    return /Something went wrong while executing your query|HTTP 50[0234]|bad gateway|service unavailable|gateway timeout|EOF|connection reset|was submitted too quickly/i.test(
+      this.stderr,
+    );
+  }
+
+  get isRetryable() {
+    return this.isSecondaryRateLimit || this.isPrimaryRateLimit || this.isTransientServerError;
+  }
+
   get retryAfterMs() {
     const match = /retry[- ]after[:\s]+(\d+)/i.exec(this.stderr);
     return match ? Number(match[1]) * 1000 : null;

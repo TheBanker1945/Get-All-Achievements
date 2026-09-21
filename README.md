@@ -3,8 +3,8 @@
 A CLI that drives a GitHub account toward every **earnable** profile achievement tier —
 without pretending to be other people.
 
-> **Status: phase 1.** Quickdraw, YOLO, Pull Shark and Pair Extraordinaire all run.
-> Galaxy Brain is next. See [PLAN.md](PLAN.md).
+> **Status: phase 2.** Every automatable badge has a runner. Profile verification
+> (phase 3) is next. See [PLAN.md](PLAN.md).
 
 ## What it can and can't do
 
@@ -45,7 +45,29 @@ node src/cli.js run --limit 3     # prove it works before the long run
 node src/cli.js run --yes         # the whole plan
 ```
 
-Individual badges: `quickdraw`, `yolo`, `pull-shark --target silver`.
+Individual badges: `quickdraw`, `yolo`, `pull-shark --target silver`, `galaxy-brain`.
+
+### Galaxy Brain needs a second account
+
+It is the only badge where another account must actually act, because one account cannot
+ask a question and be credited for answering it. Each round: the **alt** opens a Q&A
+discussion, **you** reply, the **alt** marks your reply as the answer. Only the reply is
+credited, so steps 1 and 3 run under the alt's token.
+
+Create a classic token on the *alt* account with the **`public_repo`** scope, then:
+
+```sh
+echo "ghp_xxxx" > .gaa-alt-token      # gitignored
+# or: export GAA_ALT_TOKEN=ghp_xxxx
+```
+
+A token with no scopes ticked still passes an identity check but cannot create
+discussions, which fails with a clear message rather than silently doing nothing.
+Putting `altToken` in `gaa.config.json` is refused outright - that file is committed.
+
+Note this creates one public discussion thread per round (32 for Gold). The tool enables
+Discussions automatically, but an **answerable** (Q&A) category must exist, since only
+answerable categories can have an accepted answer.
 
 ### Options
 
@@ -97,6 +119,12 @@ long tail. Run `gaa plan` to see the milestone schedule.
 requests/minute and ~500/hour. One PR cycle costs about three, so the safe ceiling is
 ~150 cycles/hour — which makes Gold Pull Shark a **~7 hour run**. It's paced and resumable
 by design; progress lives in `.gaa-state.json`.
+
+**Transient failures are not real failures.** GitHub intermittently returns a 5xx or an
+opaque `Something went wrong while executing your query`. Those are retried with a short
+backoff (5s doubling to 60s). Rate limits get a much longer one. Everything else - merge
+conflicts, 403s, 404s - fails immediately and deliberately, because retrying a real error
+just burns rate-limit budget.
 
 **Badges lag.** Achievements are granted by a periodic backfill job, not synchronously.
 Allow up to ~24h before one shows on your profile. "Not showing yet" is not "didn't work".

@@ -9,6 +9,7 @@ import { buildPlan, milestones, DEFAULT_TARGETS } from '../src/plan.js';
 import { coauthorName, coauthorTrailer } from '../src/badges/pr-cycle.js';
 import { loadState, recordCycle, getCount, saveState } from '../src/state.js';
 import { loadSettings } from '../src/settings.js';
+import { CommandError } from '../src/gh.js';
 
 const COAUTHOR = { name: 'alt', email: '1+alt@users.noreply.github.com' };
 const emptyState = () => ({ version: 1, repo: 'o/r', badges: {} });
@@ -107,6 +108,33 @@ describe('plan building', () => {
   });
 });
 
+describe('galaxy brain planning', () => {
+  it('is skipped without an alt token, since one account cannot self-accept', () => {
+    const plan = buildPlan({ state: emptyState(), coauthor: COAUTHOR });
+    assert.ok(!plan.tasks.some((t) => t.kind === 'galaxy-brain'));
+    assert.ok(plan.skipped.some((s) => s.badge === 'galaxy-brain' && /GAA_ALT_TOKEN/.test(s.reason)));
+  });
+
+  it('schedules 32 rounds for gold when a token is present', () => {
+    const plan = buildPlan({ state: emptyState(), coauthor: COAUTHOR, altToken: 'x' });
+    const gb = plan.tasks.find((t) => t.kind === 'galaxy-brain');
+    assert.equal(gb.rounds, 32);
+  });
+
+  it('sorts ahead of the PR campaign because it is far cheaper', () => {
+    const plan = buildPlan({ state: emptyState(), coauthor: COAUTHOR, altToken: 'x' });
+    const kinds = plan.tasks.map((t) => t.kind);
+    assert.ok(kinds.indexOf('galaxy-brain') < kinds.indexOf('pr-campaign'));
+  });
+
+  it('subtracts rounds already recorded', () => {
+    const state = emptyState();
+    state.badges['galaxy-brain'] = { completed: 30 };
+    const plan = buildPlan({ state, coauthor: COAUTHOR, altToken: 'x' });
+    assert.equal(plan.tasks.find((t) => t.kind === 'galaxy-brain').rounds, 2);
+  });
+});
+
 describe('milestones', () => {
   it('lists tiers in the order they are crossed', () => {
     const list = milestones({ state: emptyState(), cycles: 1024, coauthoredCycles: 48 });
@@ -126,6 +154,36 @@ describe('milestones', () => {
     state.badges.yolo = { completed: 1 };
     const list = milestones({ state, cycles: 10, coauthoredCycles: 0 });
     assert.ok(!list.some((m) => m.badge === 'yolo'));
+  });
+});
+
+describe('error classification', () => {
+  const err = (stderr) => new CommandError('gh', ['pr', 'create'], { stderr, code: 1 });
+
+  it('retries the opaque GraphQL failure that killed a real run', () => {
+    // Actual stderr from cycle 60 of the Pull Shark Silver run.
+    const e = err('pull request create failed: GraphQL: Something went wrong while ' +
+      'executing your query on 2026-09-21T16:27:34Z. Please include `D74D:1D63CA` ...');
+    assert.equal(e.isTransientServerError, true);
+    assert.equal(e.isRetryable, true);
+  });
+
+  it('retries rate limits and 5xx', () => {
+    assert.equal(err('You have exceeded a secondary rate limit').isRetryable, true);
+    assert.equal(err('API rate limit exceeded for user').isRetryable, true);
+    assert.equal(err('HTTP 502: Bad gateway').isRetryable, true);
+  });
+
+  it('does NOT retry real failures, which would just burn rate limit budget', () => {
+    assert.equal(err('merge conflict between base and head').isRetryable, false);
+    assert.equal(err('HTTP 403: Resource not accessible by integration').isRetryable, false);
+    assert.equal(err('HTTP 404: Not Found').isRetryable, false);
+    assert.equal(err('a pull request already exists for this branch').isRetryable, false);
+  });
+
+  it('honours a Retry-After header when GitHub sends one', () => {
+    assert.equal(err('secondary rate limit. retry-after: 42').retryAfterMs, 42_000);
+    assert.equal(err('secondary rate limit').retryAfterMs, null);
   });
 });
 
@@ -175,6 +233,16 @@ describe('settings', () => {
 
   it('rejects an unknown merge method', () => {
     assert.throws(() => loadSettings(tmp(), { mergeMethod: 'yeet' }), /squash, merge or rebase/);
+  });
+
+  it('refuses a token committed into the config file', () => {
+    const root = tmp();
+    writeFileSync(join(root, 'gaa.config.json'), JSON.stringify({ altToken: 'ghp_x' }), 'utf8');
+    assert.throws(() => loadSettings(root), /Set the GAA_ALT_TOKEN environment variable/);
+  });
+
+  it('accepts an alt token passed as an override', () => {
+    assert.equal(loadSettings(tmp(), { altToken: 'ghp_x' }).altToken, 'ghp_x');
   });
 
   it('reports invalid config JSON by name', () => {

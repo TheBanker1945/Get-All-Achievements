@@ -19,6 +19,7 @@ const QUICKDRAW_MS = 5_000;
 
 export const DEFAULT_TARGETS = {
   quickdraw: 'base',
+  'galaxy-brain': 'gold',
   'pull-shark': 'gold',
   'pair-extraordinaire': 'gold',
 };
@@ -69,6 +70,7 @@ export function buildPlan({
   targets = DEFAULT_TARGETS,
   intervalMs = RATE.defaultIntervalMs,
   coauthor = null,
+  altToken = null,
 }) {
   const tasks = [];
   const skipped = [];
@@ -78,6 +80,23 @@ export function buildPlan({
       skipped.push({ badge: 'quickdraw', reason: 'already done' });
     } else {
       tasks.push({ kind: 'quickdraw', badge: 'quickdraw', estMs: QUICKDRAW_MS });
+    }
+  }
+
+  if (targets['galaxy-brain']) {
+    const rounds = Math.max(
+      0,
+      threshold('galaxy-brain', targets['galaxy-brain']) - getCount(state, 'galaxy-brain'),
+    );
+    if (!altToken) {
+      skipped.push({ badge: 'galaxy-brain', reason: 'no GAA_ALT_TOKEN set' });
+    } else if (rounds > 0) {
+      tasks.push({
+        kind: 'galaxy-brain',
+        badge: 'galaxy-brain',
+        rounds,
+        estMs: rounds * RATE.galaxyRoundMs,
+      });
     }
   }
 
@@ -129,6 +148,10 @@ export function describePlan(plan) {
   for (const task of plan.tasks) {
     if (task.kind === 'quickdraw') {
       lines.push(`  Quickdraw           1 issue open+close        ~${formatDuration(task.estMs)}`);
+    } else if (task.kind === 'galaxy-brain') {
+      lines.push(
+        `  Galaxy Brain        ${task.rounds} Q&A rounds (alt asks, you answer)   ~${formatDuration(task.estMs)}`,
+      );
     } else {
       const co = task.coauthoredCycles
         ? `${task.coauthoredCycles} co-authored + ${task.plainCycles} plain`

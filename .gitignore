@@ -1,3 +1,4 @@
 node_modules/
 .gaa-state.json
 *.log
+.gaa-alt-token

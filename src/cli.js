@@ -19,11 +19,12 @@ import { bar, bold, cyan, dim, green, heading, line, red, yellow } from './ui.js
 import * as quickdrawBadge from './badges/quickdraw.js';
 import * as yoloBadge from './badges/yolo.js';
 import * as pullSharkBadge from './badges/pull-shark.js';
+import * as galaxyBrainBadge from './badges/galaxy-brain.js';
 
 const here = dirname(fileURLToPath(import.meta.url));
 const pkg = JSON.parse(readFileSync(join(here, '..', 'package.json'), 'utf8'));
 
-const PLANNED = { 'galaxy-brain': 'phase 2', verify: 'phase 3' };
+const PLANNED = { verify: 'phase 3' };
 
 function parseArgs(argv) {
   const flags = new Map();
@@ -63,6 +64,7 @@ function usage() {
     '  quickdraw              Open and immediately close one issue',
     '  yolo                   Merge one PR with no review',
     '  pull-shark             Run merge cycles toward a Pull Shark tier',
+    '  galaxy-brain           Run Q&A rounds toward a Galaxy Brain tier',
     '  help, version',
     '',
     bold('Planned'),
@@ -76,6 +78,9 @@ function usage() {
     '  --interval <seconds>   Seconds between cycles (default 25)',
     '  --no-coauthor          Do not add a Co-authored-by trailer',
     '  --json                 Machine-readable output (status only)',
+    '',
+    bold('Environment'),
+    '  GAA_ALT_TOKEN          Alt account token, required for Galaxy Brain',
     '',
     dim('Badge requirements: ACHIEVEMENTS.md   Roadmap: PLAN.md'),
   ].join('\n');
@@ -185,8 +190,15 @@ function planFrom(state, settings, flags) {
     targets['pull-shark'] = tier;
     targets['pair-extraordinaire'] = tier === 'gold' ? 'gold' : tier;
   }
+  if (flags.has('target')) targets['galaxy-brain'] = String(flags.get('target'));
   const coauthor = flags.has('no-coauthor') ? null : settings.coauthor;
-  return buildPlan({ state, targets, intervalMs: settings.intervalMs, coauthor });
+  return buildPlan({
+    state,
+    targets,
+    intervalMs: settings.intervalMs,
+    coauthor,
+    altToken: settings.altToken,
+  });
 }
 
 async function planCommand(flags) {
@@ -202,7 +214,8 @@ async function planCommand(flags) {
 
 function progressLine({ done, total, index, result, remainingMs }) {
   const pct = `${done}/${total}`;
-  const pr = result.prNumber ? `#${result.prNumber}` : '';
+  const ref = result.prNumber ?? result.discussion?.number;
+  const pr = ref ? `#${ref}` : '';
   return `  ${dim(bar(done, total))} ${pct.padEnd(12)} cycle ${index} ${dim(pr)} ${dim(`eta ${formatDuration(remainingMs)}`)}`;
 }
 
@@ -229,6 +242,35 @@ async function runCampaign(env, task, flags) {
       onProgress: (p) => console.log(progressLine(p)),
     });
   }
+}
+
+async function runGalaxyBrain(env, task, flags) {
+  const limit = flags.has('limit') ? Number(flags.get('limit')) : Infinity;
+  const rounds = Math.min(task.rounds, limit);
+  if (rounds <= 0) return;
+  await galaxyBrainBadge.run(env.ctx, {
+    state: env.state,
+    count: rounds,
+    altToken: env.settings.altToken,
+    dryRun: flags.has('dry-run'),
+    onProgress: (p) => console.log(progressLine(p)),
+  });
+}
+
+async function galaxyBrainCommand(flags) {
+  const env = await setup({}, overridesFrom(flags));
+  if (!env) return 1;
+  const plan = planFrom(env.state, env.settings, flags);
+  const task = plan.tasks.find((t) => t.kind === 'galaxy-brain');
+  if (!task) {
+    const why = plan.skipped.find((s) => s.badge === 'galaxy-brain');
+    console.log(why ? yellow(`Galaxy Brain skipped - ${why.reason}`) : green('Galaxy Brain is already at the requested tier.'));
+    return why ? 1 : 0;
+  }
+  await runGalaxyBrain(env, task, flags);
+  console.log('');
+  console.log(dim(BACKFILL_LAG_NOTE));
+  return 0;
 }
 
 async function runCommand(flags) {
@@ -266,6 +308,9 @@ async function runCommand(flags) {
         recordCycle(env.state, 'quickdraw', { issue: result.issueNumber }, env.ctx.root);
         console.log(`  ${green('done')} issue #${result.issueNumber} opened and closed`);
       }
+    } else if (task.kind === 'galaxy-brain') {
+      console.log(heading('Galaxy Brain'));
+      await runGalaxyBrain(env, task, flags);
     } else if (task.kind === 'pr-campaign') {
       console.log(heading('PR campaign'));
       await runCampaign(env, task, flags);
@@ -360,6 +405,8 @@ async function main(argv) {
       return yoloCommand(flags);
     case 'pull-shark':
       return pullSharkCommand(flags);
+    case 'galaxy-brain':
+      return galaxyBrainCommand(flags);
     case 'help':
       console.log(usage());
       return 0;

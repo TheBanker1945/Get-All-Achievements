@@ -28,9 +28,9 @@ export class Throttle {
 }
 
 /**
- * Run `fn`, retrying only on rate-limit errors. Anything else (no permission, bad
- * branch, merge conflict) is a real failure and is rethrown immediately — retrying it
- * would just burn the rate limit budget.
+ * Run `fn`, retrying rate limits and transient GitHub server errors. Anything else
+ * (no permission, bad branch, merge conflict) is a real failure and is rethrown
+ * immediately — retrying it would just burn the rate limit budget.
  */
 export async function withRetry(fn, { onRetry } = {}) {
   let attempt = 0;
@@ -38,16 +38,13 @@ export async function withRetry(fn, { onRetry } = {}) {
     try {
       return await fn();
     } catch (error) {
-      const rateLimited =
-        error instanceof CommandError &&
-        (error.isSecondaryRateLimit || error.isPrimaryRateLimit);
+      const retryable = error instanceof CommandError && error.isRetryable;
+      if (!retryable || attempt >= RATE.maxRetries) throw error;
 
-      if (!rateLimited || attempt >= RATE.maxRetries) throw error;
-
-      const backoff = Math.min(
-        error.retryAfterMs ?? RATE.baseBackoffMs * 2 ** attempt,
-        RATE.maxBackoffMs,
-      );
+      // Rate limits need minutes; a 5xx usually clears in seconds.
+      const backoff = error.isTransientServerError
+        ? Math.min(RATE.transientBackoffMs * 2 ** attempt, RATE.maxTransientBackoffMs)
+        : Math.min(error.retryAfterMs ?? RATE.baseBackoffMs * 2 ** attempt, RATE.maxBackoffMs);
       attempt += 1;
       onRetry?.({ attempt, backoffMs: backoff, error });
       await sleep(backoff);
